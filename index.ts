@@ -28,7 +28,7 @@ const QueryParamRuntype = RT.Record({
 });
 
 type Payload = RT.Static<typeof PayloadRuntype>;
-type Params = RT.Static<typeof QueryParamRuntype>;
+type QueryParams = RT.Static<typeof QueryParamRuntype>;
 
 /**
  * Some random function that requires the payload to be of the certain type.
@@ -39,8 +39,8 @@ const payloadLogger = (payload: Payload) =>
 /**
  * Some random function that requires the query parameters to be of the certain type.
  */
-const paramsLogger = (params: Params) =>
-  console.log(`Received params: ${JSON.stringify(params)}`);
+const queryLogger = (query: QueryParams) =>
+  console.log(`Received params: ${JSON.stringify(query)}`);
 
 /**
  * APPROACH 1:
@@ -54,13 +54,13 @@ app.post('/foo', (req, res) => {
     // Make sure the payload is of the correct type, runtypes throws if it's not.
     const payload = PayloadRuntype.check(req.body);
     // Make sure the query parameters are of the correct type, runtypes throws if they're not.
-    const params = QueryParamRuntype.check(req.query);
+    const query = QueryParamRuntype.check(req.query);
 
-    // Whatever you would actually do with the payload...
+    // Whatever you would actually do with the payload and query...
     payloadLogger(payload);
-    paramsLogger(params);
+    queryLogger(query);
 
-    res.json({ payload, params });
+    res.json({ payload, query });
   } catch (err) {
     res.status(400).send({ error: err });
   }
@@ -69,18 +69,30 @@ app.post('/foo', (req, res) => {
 /**
  * APPROACH 2:
  *
- * Parse the types in a dedicated middleware function. The req.body and req.query
+ * Parse the types in dedicated middleware functions. The req.body and req.query
  * are then guaranteed to be of the expected types inside the handler.
  */
-type ParserMiddlewareCreator = <T, V extends ParsedQs>(
+type BodyTypeParserMiddlewareCreator = <T>(
   bodyParserRuntype: RT.Runtype<T>,
-  queryParserRuntype: RT.Runtype<V>,
-) => express.RequestHandler<any, any, T, V>;
+) => express.RequestHandler<any, any, T, any>;
 
-const typeParserMiddleware: ParserMiddlewareCreator =
-  (bodyParserRuntype, queryParserRuntype) => (req, res, next) => {
+const bodyTypeParserMiddleware: BodyTypeParserMiddlewareCreator =
+  bodyParserRuntype => (req, res, next) => {
     try {
       bodyParserRuntype.check(req.body);
+      next();
+    } catch (err) {
+      res.status(400).send({ error: err });
+    }
+  };
+
+type QueryTypeParserMiddlewareCreator = <V extends ParsedQs>(
+  queryParserRuntype: RT.Runtype<V>,
+) => express.RequestHandler<any, any, any, V>;
+
+const queryTypeParserMiddleware: QueryTypeParserMiddlewareCreator =
+  queryParserRuntype => (req, res, next) => {
+    try {
       queryParserRuntype.check(req.query);
       next();
     } catch (err) {
@@ -90,18 +102,19 @@ const typeParserMiddleware: ParserMiddlewareCreator =
 
 app.post(
   '/bar',
-  typeParserMiddleware(PayloadRuntype, QueryParamRuntype),
+  bodyTypeParserMiddleware(PayloadRuntype),
+  queryTypeParserMiddleware(QueryParamRuntype),
   (req, res) => {
     // req.body is now guaranteed to be a Payload
     const payload = req.body;
-    // req.query is now guaranteed to be a Params
-    const params = req.query;
+    // req.query is now guaranteed to be a QueryParams
+    const query = req.query;
 
-    // Whatever you would actually do with the payload and params...
+    // Whatever you would actually do with the payload and query...
     payloadLogger(payload);
-    paramsLogger(params);
+    queryLogger(query);
 
-    res.json(payload);
+    res.json({ payload, query });
   },
 );
 
