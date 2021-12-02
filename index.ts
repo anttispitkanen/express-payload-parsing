@@ -27,20 +27,28 @@ const QueryParamRuntype = RT.Record({
   foo: RT.Literal('bar'),
 });
 
+// Let's require a string numeric path param, like a database ID
+const PathParamRuntype = RT.Record({
+  id: RT.Union(RT.Literal('1'), RT.Literal('2')),
+});
+
+// Static types for function signatures
 type Payload = RT.Static<typeof PayloadRuntype>;
 type QueryParams = RT.Static<typeof QueryParamRuntype>;
+type PathParams = RT.Static<typeof PathParamRuntype>;
 
 /**
- * Some random function that requires the payload to be of the certain type.
+ * Some random functions that require the parameters to be of certain types. The
+ * compiler would let us know if we were passing anys or unknowns to these.
  */
 const payloadLogger = (payload: Payload) =>
   console.log(`Received payload: ${JSON.stringify(payload)}`);
 
-/**
- * Some random function that requires the query parameters to be of the certain type.
- */
 const queryLogger = (query: QueryParams) =>
-  console.log(`Received params: ${JSON.stringify(query)}`);
+  console.log(`Received query params: ${JSON.stringify(query)}`);
+
+const paramsLogger = (params: PathParams) =>
+  console.log(`Received path params: ${JSON.stringify(params)}`);
 
 /**
  * APPROACH 1:
@@ -100,21 +108,39 @@ const queryTypeParserMiddleware: QueryTypeParserMiddlewareCreator =
     }
   };
 
+type PathParamsParserMiddlewareCreator = <U>(
+  pathParamParserRuntype: RT.Runtype<U>,
+) => express.RequestHandler<U, any, any, any>;
+
+const pathParamsParserMiddleware: PathParamsParserMiddlewareCreator =
+  pathParamsParserRuntype => (req, res, next) => {
+    try {
+      pathParamsParserRuntype.check(req.params);
+      next();
+    } catch (err) {
+      res.status(400).send({ error: err });
+    }
+  };
+
 app.post(
-  '/bar',
+  '/bar/:id',
   bodyTypeParserMiddleware(PayloadRuntype),
   queryTypeParserMiddleware(QueryParamRuntype),
+  pathParamsParserMiddleware(PathParamRuntype),
   (req, res) => {
     // req.body is now guaranteed to be a Payload
     const payload = req.body;
     // req.query is now guaranteed to be a QueryParams
     const query = req.query;
+    // req.params is now guaranteed to be a PathParams
+    const params = req.params;
 
     // Whatever you would actually do with the payload and query...
     payloadLogger(payload);
     queryLogger(query);
+    paramsLogger(params);
 
-    res.json({ payload, query });
+    res.json({ payload, query, params });
   },
 );
 
