@@ -45,9 +45,9 @@ const paramsLogger = (params: Params) =>
 /**
  * APPROACH 1:
  *
- * Parse the payload type as the first thing inside the route handler.
- * This works fine but leaves the parsing to the route handler, meaning
- * it can be forgotten.
+ * Parse the body and query types as the first thing inside the route handler.
+ * This works fine but leaves the parsing to the route handler, meaning it can
+ * be forgotten. Also it makes the route handler more verbose.
  */
 app.post('/foo', (req, res) => {
   try {
@@ -69,19 +69,19 @@ app.post('/foo', (req, res) => {
 /**
  * APPROACH 2:
  *
- * Parse the payload type in a dedicated middleware function. The req.body is
- * then guaranteed to be of the expected type inside the handler.
+ * Parse the types in a dedicated middleware function. The req.body and req.query
+ * are then guaranteed to be of the expected types inside the handler.
  */
 type ParserMiddlewareCreator = <T, V extends ParsedQs>(
-  bodyParserFn: RT.Runtype<T>,
-  queryParserFn: RT.Runtype<V>,
+  bodyParserRuntype: RT.Runtype<T>,
+  queryParserRuntype: RT.Runtype<V>,
 ) => express.RequestHandler<any, any, T, V>;
 
 const typeParserMiddleware: ParserMiddlewareCreator =
-  (bodyParserFn, queryParserFn) => (req, res, next) => {
+  (bodyParserRuntype, queryParserRuntype) => (req, res, next) => {
     try {
-      bodyParserFn.check(req.body);
-      queryParserFn.check(req.query);
+      bodyParserRuntype.check(req.body);
+      queryParserRuntype.check(req.query);
       next();
     } catch (err) {
       res.status(400).send({ error: err });
